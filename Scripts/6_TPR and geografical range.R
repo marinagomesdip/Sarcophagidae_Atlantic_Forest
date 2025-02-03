@@ -88,13 +88,13 @@ study_sp <- c("Argoravinia aurea",
               "Villegasia almeidai")
 
 
-#para calcular TPR --------------------------------------------------------------
-# Criar um data frame vazio para armazenar os resultados
+#to calculate TPR --------------------------------------------------------------
+# Create an empty data frame to store the results
 df_tpr <- data.frame(nome_cientifico = character(), TPR = numeric(), stringsAsFactors = FALSE)
 
 for(i in 1:length(study_sp)){
   
-  # IMPORTANDO RASTER DA ESPECIE ALVO
+  # IMPORTING TARGET SPECIES RASTER
   # path to file
   caminho_arquivo <- paste0("C:/Users/Dell/OneDrive/Área de Trabalho/cap3/", study_sp[i], 
                             "/present/ensemble_2/", study_sp[i], "_ensemble_0.7_consensus.tif")
@@ -102,119 +102,119 @@ for(i in 1:length(study_sp)){
   # read the raster file
   ras <- raster(caminho_arquivo)
   
-  # FILTRAR DADOS DE OCC DA ESPECIE ALVO
+  # FILTER OCCURRENCE DATA FOR THE TARGET SPECIES
   occal <- occ %>%
     filter(nome_cientifico == study_sp[i])
   
-  # TRANSFORMAR AS COORDS EM OBJETO ESPACIAL
+  # TRANSFORM COORDINATES INTO A SPATIAL OBJECT
   occal_sf <- occal %>%
     st_as_sf(coords = c("longitude", "latitude"), crs = crs(ras), remove = FALSE)
   
-  # EXTRAIR OS VALORES DO RASTER PARA AS OCORRENCIAS
+  # EXTRACT RASTER VALUES FOR THE OCCURRENCES
   valores_raster <- raster::extract(ras, st_coordinates(occal_sf))
   
-  # ADICIONAR OS VALORES EXTRAÍDOS AO DATA FRAME
+  # ADD THE EXTRACTED VALUES TO THE DATA FRAME
   occal$valor_raster <- valores_raster
   
-  # CALCULAR O TPR
-  # Contar o número de ocorrências com valor de raster = 1
+  # CALCULATE TPR
+  # Count the number of occurrences with raster value = 1
   ocorrencias_valor_1 <- sum(occal$valor_raster == 1, na.rm = TRUE)
   
-  # Total de ocorrências
+  # Total number of occurrences
   total_ocorrencias <- nrow(occal)
   
-  # Calcular o TPR (ocorrências com valor 1 / total de ocorrências)
+  # Calculate TPR (occurrences with value 1 / total occurrences)
   tpr <- ocorrencias_valor_1 / total_ocorrencias
   
-  # ADICIONAR O RESULTADO AO DATA FRAME FINAL
+  # ADD THE RESULT TO THE FINAL DATA FRAME
   df_tpr <- rbind(df_tpr, data.frame(nome_cientifico = study_sp[i], TPR = tpr))
 }
 
 
-#para calcular % de área prevista -----------------------------------------------------
+#to calculate % of predicted area -----------------------------------------------------
 
-# Criar um data frame vazio para armazenar os resultados
+# Create an empty data frame to store the results
 df_georan <- data.frame(nome_cientifico = character(), proporcao_area = numeric(), stringsAsFactors = FALSE)
 
-# Para obter o shapefile da Mata Atlântica
+# To get the Atlantic Forest shapefile
 mata_atlantica <- geobr::read_biomes(year = 2019, showProgress = FALSE) %>%
   filter(code_biome == 4)
 
-# Iterar sobre as espécies
+# Iterate over the species
 for(i in 1:length(study_sp)){
   
-  #IMPORTANDO RASTER DA ESPECIE ALVO
+  # IMPORTING TARGET SPECIES RASTER
   caminho_arquivo <- paste0("C:/Users/Dell/OneDrive/Área de Trabalho/cap3/", study_sp[i], 
                             "/present/ensemble_2/", study_sp[i], "_ensemble_0.7_consensus.tif")
   
   ras <- raster(caminho_arquivo)
   
-  # Reprojetar a máscara da Mata Atlântica para combinar com o CRS do raster
+  # Reproject the Atlantic Forest mask to match the raster CRS
   mata_atlantica_proj <- st_transform(mata_atlantica, crs = crs(ras))
   
-  # Converter para objeto Spatial para aplicar a máscara
+  # Convert to Spatial object to apply the mask
   mata_atlantica_sp <- as(mata_atlantica_proj, "Spatial")
   
-  # Aplicar a máscara no raster
+  # Apply the mask to the raster
   ras_masked <- mask(ras, mata_atlantica_sp)
   
-  # Contar o total de células dentro da área mascarada (excluindo as células NA)
+  # Count the total number of cells within the masked area (excluding NA cells)
   total_cells_within_mask <- sum(!is.na(values(ras_masked)))
   
-  # Contar o número de células com valor 1 dentro da área mascarada
+  # Count the number of cells with value 1 within the masked area
   cells_with_1 <- sum(values(ras_masked) == 1, na.rm = TRUE)
   
-  # Calcular a proporção de células com valor 1 em relação ao total dentro da máscara
+  # Calculate the proportion of cells with value 1 relative to the total within the mask
   proporcao <- (cells_with_1 / total_cells_within_mask) * 100
   
-  # ADICIONAR O RESULTADO AO DATA FRAME FINAL
+  # ADD THE RESULT TO THE FINAL DATA FRAME
   df_georan <- rbind(df_georan, data.frame(nome_cientifico = study_sp[i], proporcao_area = proporcao))
 }
 
-#Extraindo valores para o Material Suplementar de todas as espécies -------------------------
+#Extracting values for the Supplementary Material for all species -------------------------
 
-# Criar um data frame vazio para armazenar os resultados
+# Create an empty data frame to store the results
 df_metrics <- data.frame(nome_cientifico = character(), N = numeric(), meanAUC = numeric(), meanTSS = numeric(), stringsAsFactors = FALSE)
 
 for(i in 1:length(study_sp)){
-  #IMPORTANDO METADATA PRA EXTRAIR O N DA ESPECIE ALVO
+  # IMPORTING METADATA TO EXTRACT THE N OF THE TARGET SPECIES
   caminho_arquivo <- paste0("C:/Users/Dell/OneDrive/Área de Trabalho/cap3/", study_sp[i], 
                             "/present/data_setup/metadata.csv")
   
   metada <- read.csv(caminho_arquivo)
   
-  #Selecionar apenas a coluna do N
+  # Select only the N column
   metada <- metada %>%
     dplyr::select(original.n)
   
-  #IMPORTANDO METRICAS PRA EXTRAIR O MEAN AUC E MEAN TSS
+  # IMPORTING METRICS TO EXTRACT THE MEAN AUC AND MEAN TSS
   caminho_arquivo <- paste0("C:/Users/Dell/OneDrive/Área de Trabalho/cap3/", study_sp[i], 
                             "/present/final_models/", study_sp[i], "_mean_statistics_original.csv")
   
   metric <- read.csv(caminho_arquivo)
   
-  #calculando o mean AUC
+  # Calculate the mean AUC
   auc <- mean(metric$AUC, na.rm = TRUE)
   
-  #calculando o mean TSS
+  # Calculate the mean TSS
   tss <- mean(metric$TSSmax, na.rm = TRUE)
   
-  # ADICIONAR O RESULTADO AO DATA FRAME FINAL
+  # ADD THE RESULT TO THE FINAL DATA FRAME
   df_metrics <- rbind(df_metrics, data.frame(nome_cientifico = study_sp[i], N = metada, meanAUC = auc, meanTSS = tss))
 }
 
 
-#Unindo tudo em um único DF -------------------------------
+#Combining everything into a single DF -------------------------------
 
 united <- left_join(df_tpr, df_georan, by = "nome_cientifico")
 
 united <- left_join(united, df_metrics, by = "nome_cientifico")
 
-#exportando dados--------------------------------------------------
+#exporting data--------------------------------------------------
 #Saving metadata
 write_csv(united,"./Data/Processados/7_Suplementar_Material5.csv")
 
-#histogramas ------------------------------------------------------
+#histograms ------------------------------------------------------
 
 tprgra <- ggplot(united, aes(x = TPR)) +
   geom_histogram(binwidth = 0.1,
