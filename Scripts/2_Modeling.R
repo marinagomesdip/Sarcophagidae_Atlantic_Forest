@@ -18,8 +18,6 @@ library(fs)
 #loading data ----------------------------------------
 #occurrences
 occ <- read.csv("./Data/Processados/7_para_rodar_modelagem.csv")
-#pseudoabsences
-#abs <- read.csv("./Data/Processados/7_pseudoausencias.csv")
 #environment layers
 bio1 <- raster("./Enviromental_data/wc2.1_10m_bio_1.tif")
 bio2 <- raster("./Enviromental_data/wc2.1_10m_bio_2.tif")
@@ -67,8 +65,8 @@ occ <- occ %>%
   rename(species_name = nome_cientifico)
 
 #preparing occurs to loop-------------------------------
-# Lista de espécies
 
+#Species list
 study_sp <- c("Argoravinia aurea",
               "Argoravinia rufiventris",
               "Blaesoxipha (Gigantotheca) plinthopyga",
@@ -152,42 +150,31 @@ for(i in 1:length(study_sp)){
   # getting only occurrences for this species
   species_df <- occ[occ$species_name == study_sp[i], ]
   
-  # getting only pseudoabsences for this species
-  #absences_df <- abs[abs$species_name == study_sp[i], ]
-  
-  # Calculando o número de pseudoausências a serem selecionadas
-  #num_absences <- nrow(species_df) * 10
-  
-  # Selecionando aleatoriamente as pseudoausências
-  #if(nrow(absences_df) > num_absences) {
-  #  absences_df <- absences_df %>% sample_n(num_absences)
-  #}
-  
-  #para saber qual espécie é 
+  # print the species name to known what is going on in the code 
   print(paste("Processando:", study_sp[i]))
   
   #running setup_sdmdata
-  setup_sdmdata(species_name = study_sp[i],
-                occurrences = as.data.frame(species_df),
-                predictors = variables,
-                models_dir = model_folder, # folder to save partitions
-                partition_type = "crossvalidation",
-                cv_partitions = 5,
-                cv_n = 2,
+  setup_sdmdata(species_name = study_sp[i],                   #filtering the species name for this iteration
+                occurrences = as.data.frame(species_df),      #transforming the tible of occurrences in df
+                predictors = variables,                       #name of raster stack with the variables
+                models_dir = model_folder,                    #folder to save partitions
+                partition_type = "crossvalidation",           #crossvalidation is a way to partition data without replacement
+                cv_partitions = 5,                            #number of parts that the occurrences will be divided into
+                cv_n = 2,                                     #how many times this partitions will be separed
                 seed = 512,
-                buffer_type = "mean",
-                env_filter = TRUE,
-                env_distance = "centroid",
-                min_env_dist = 0.3,
-                n_back = nrow(species_df)*10,
-                png_sdmdata = TRUE,
-                clean_dupl = TRUE,
-                clean_uni = TRUE,
-                clean_nas = TRUE,
-                geo_filt = FALSE,
-                select_variables = TRUE,
-                sample_proportion = 0.5,
-                cutoff = 0.7)
+                buffer_type = "mean",                         #Shows whether the buffer should be calculated, in this case, using the "mean" distance between occurrence points
+                env_filter = TRUE,                            #filter used to exclude pseudoabsence from very close to the occurrences point
+                env_distance = "centroid",                    #type of enviromental distance, the distance of each raster pixel to the environmental centroid of the distribution
+                min_env_dist = 0.3,                           #Sets a minimum value to exclude the areas closest (in the environmental space) to the occurrences or their centroid, expressed in quantiles, from 0 (the closest) to 1
+                n_back = nrow(species_df)*10,                 #number of pseudoabsences (in this case, 10x number of occurrences)
+                png_sdmdata = TRUE,                           #Save the data in a png file
+                clean_dupl = TRUE,                            #removes points with the same longitude and latitude
+                clean_uni = TRUE,                             #selects only one point per pixel
+                clean_nas = TRUE,                             #removes points that are outside the bounds of the raster
+                geo_filt = FALSE,                             #delete occurrences that are too close to each other
+                select_variables = TRUE,                      #Whether a variable selection should be performed. It excludes highly correlated environmental variables
+                sample_proportion = 0.5,                      #Proportion of the raster values to be sampled to calculate the correlation. The value should be set as a decimal, between 0 and 1
+                cutoff = 0.7)                                 #Cutoff value of correlation between variables to exclude environmental layers
 }
 
 # modleR 2/5: model calibration -------------------------------------------
@@ -195,13 +182,13 @@ for(i in 1:length(study_sp)){
 for(i in 1:length(study_sp)){
   
   # run selected algorithms for each partition
-  do_many(species_name = study_sp[i],
-          predictors = variables,
-          models_dir = model_folder, # folder to save partitions
-          png_partitions = TRUE,
+  do_many(species_name = study_sp[i],          #filtering the species name for this iteration        
+          predictors = variables,              #name of raster stack with variables
+          models_dir = model_folder,           #folder to save partitions
+          png_partitions = TRUE,               #png map of every partitions of algortihms
           write_bin_cut = FALSE,
           write_rda = TRUE,
-          bioclim = TRUE,
+          bioclim = TRUE,                      #algorithms = TRUE means that this algorithm will run
           domain = TRUE,
           glm = TRUE,
           svmk = TRUE,
@@ -219,12 +206,12 @@ for(i in 1:length(study_sp)){
 
 for(i in 1:length(study_sp)){
   
-  final_model(species_name = study_sp[i],
-              algorithms = NULL,
-              models_dir = model_folder,
-              scale_models = TRUE, # convert model outputs to 0-1
-              which_models = c("raw_mean", "raw_mean_th"), 
-              mean_th_par = "spec_sens",
+  final_model(species_name = study_sp[i],                  #filtering the species name for this iteration
+              algorithms = NULL,                           #use all algorthms in the folder
+              models_dir = model_folder,                   #folder to save 
+              scale_models = TRUE,                         #convert model outputs to 0-1
+              which_models = c("raw_mean", "raw_mean_th"), #for generating binary and continuous models
+              mean_th_par = "spec_sens",                   #selecting threshold maximizing the metrics
               png_final = TRUE,
               overwrite = TRUE)
   
@@ -235,62 +222,64 @@ for(i in 1:length(study_sp)){
 for(i in 1:length(study_sp)){
   print(paste("Processando:", study_sp[i]))
   
-  # Caminho para o arquivo que tem o AUC médio
+  #Path to file that had median AUC
   caminho <- paste0("./cap3/", study_sp[i], "/present/final_models/", study_sp[i], "_mean_statistics.csv")
   
-  # Verificar se o arquivo existe
+  #Check if the file exists
   if (file.exists(caminho)) {
-    # Ler o arquivo
+    #Read the file
     algorithms_data <- read_csv(caminho)
-    
-    # Filtrar os algoritmos que obedecem a regra
+  
+    #Filter the algorithms that had AUC > 0.7
     species_algorithms <- algorithms_data %>%
       filter(AUC > 0.7) %>%
       dplyr::select(algorithm) %>%
       distinct()
     
-    # Converter a coluna de algoritmos em um vetor
+    #Convert the algorithms column to a vector
     algorithms_vector <- as.character(species_algorithms$algorithm)
     
-    # Verificar se há mais de um algoritmo
-    if (length(algorithms_vector) > 1) {
-      # Renomear o arquivo original
+    #Verificar se há mais de um algoritmo
+    if (length(algorithms_vector) > 1) {                                   #if the species in this round has more than one algorithm obeying the rule
+     
+      #Rename the original file
       caminho_original <- paste0("./cap3/", study_sp[i], "/present/final_models/", study_sp[i], "_mean_statistics_original.csv")
       file_move(caminho, caminho_original)
       print(paste("Arquivo original renomeado para", caminho_original))
       
-      # Filtrar o dataframe original para incluir apenas os algoritmos no vetor
+      #Filter the original dataframe to only include the algorithms in the vector
       filtered_algorithms_data <- algorithms_data %>%
         filter(algorithm %in% algorithms_vector)
       
-      # Salvar o novo arquivo filtrado
+      #Save the new filtered file
       write_csv(filtered_algorithms_data, caminho)
       print(paste("Novo arquivo filtrado salvo como", caminho))
       
-      # Chamar a função ensemble_model
-      ensemble_model(species_name = study_sp[i],
-                     occurrences = as.data.frame(species_df),
-                     algorithms = algorithms_vector,
-                     which_final = "raw_mean",
-                     which_ensemble = c("average"),
-                     png_ensemble = TRUE,
-                     uncertainty = TRUE,
-                     performance_metric = c("TSSmax"),
-                     models_dir = model_folder,
-                     overwrite = TRUE)
-    } else if (length(algorithms_vector) == 1) {
-      # Criar a pasta ensemble
+      #Call the ensemble_model function
+      ensemble_model(species_name = study_sp[i],                        #filtering the species name for this iteration
+                     occurrences = as.data.frame(species_df),           #transforming the tible of occurrences in df
+                     algorithms = algorithms_vector,                    #inserting only the filtered algorithms (AUC > 0.7)
+                     which_final = "raw_mean",                          #using the continous model
+                     which_ensemble = c("average"),                     #calculating the average between the models
+                     png_ensemble = TRUE,                               #salving a png with the results
+                     uncertainty = TRUE,                                #calculating uncertainty (Attention: the uncertainty calculated by the package use all algorithms in the folder!!)
+                     performance_metric = c("TSSmax"),                  #metric used to calculate the average
+                     models_dir = model_folder,                         #the folder of the analysis
+                     overwrite = TRUE)                                  #allows overwriting if you run the code again
+  
+      } else if (length(algorithms_vector) == 1) {                      #if the species in this round has only one algorithm obeying the rule
+      #Create the ensemble folder
       ensemble_dir <- paste0("./cap3/", study_sp[i], "/present/ensemble")
       dir_create(ensemble_dir)
       
-      # Nome do arquivo do algoritmo
+      #Algorithm file name
       algorithm_name <- algorithms_vector[1]
       source_file <- paste0("./cap3/", study_sp[i], "/present/final_models/", study_sp[i], "_", algorithm_name, "_raw_mean.tif")
       target_file <- paste0(ensemble_dir, "/", study_sp[i], "_", algorithm_name, "_raw_mean.tif")
       
-      # Verificar se o arquivo fonte existe antes de copiar
+      #Check if the source file exists before copying
       if (file.exists(source_file)) {
-        # Copiar o arquivo
+        #Copy the file
         file_copy(source_file, target_file)
         print(paste("Arquivo copiado para", target_file))
       } else {
@@ -304,56 +293,56 @@ for(i in 1:length(study_sp)){
   }
 }
 
-# modleR 5/5: consensus model continuous ----------------------------------------
+# modleR 5/5: consensus model binary ----------------------------------------
 
 for(i in 1:length(study_sp)){
   print(paste("Processando:", study_sp[i]))
   
-  # Caminho para o arquivo que tem o AUC médio
+  #Path to file that had median AUC
   caminho <- paste0("./cap3/", study_sp[i], "/present/final_models/", study_sp[i], "_mean_statistics.csv")
   
-  # Verificar se o arquivo existe
+  #Check if the file exists
   if (file.exists(caminho)) {
-    # Ler o arquivo
+    #Read the file
     algorithms_data <- read_csv(caminho)
     
-    # Filtrar os algoritmos que obedecem a regra
+    #Filter the algorithms that had AUC > 0.7
     species_algorithms <- algorithms_data %>%
       filter(AUC > 0.7) %>%
       dplyr::select(algorithm) %>%
       distinct()
     
-    # Converter a coluna de algoritmos em um vetor
+    #Convert the algorithms column to a vector
     algorithms_vector <- as.character(species_algorithms$algorithm)
     
-    # Verificar se há mais de um algoritmo
+    #Verificar se há mais de um algoritmo
     if (length(algorithms_vector) > 1) {
 
-    # Chamar a função ensemble_model
-      ensemble_model(species_name = study_sp[i],
-                     occurrences = as.data.frame(species_df),
-                     algorithms = algorithms_vector,
-                     ensemble_dir = "ensemble_2", 
-                     which_final = "raw_mean_th",
-                     which_ensemble = c("consensus"),
-                     png_ensemble = TRUE,
-                     uncertainty = TRUE,
-                     consensus_level = 0.7,
-                     models_dir = model_folder,
-                     overwrite = TRUE)
+    #Call the ensemble_model function
+      ensemble_model(species_name = study_sp[i],                           #filtering the species name for this iteration
+                     occurrences = as.data.frame(species_df),              #transforming the tible of occurrences in df
+                     algorithms = algorithms_vector,                       #inserting only the filtered algorithms (AUC > 0.7)
+                     ensemble_dir = "ensemble_2",                          #changing the name of the folder to not overwrite the other ensemble
+                     which_final = "raw_mean_th",                          #using the binary model
+                     which_ensemble = c("consensus"),                      #consensus method to do ensemble binary
+                     png_ensemble = TRUE,                                  #salving a png with the results
+                     uncertainty = TRUE,                                   #calculating uncertainty (Attention: the uncertainty calculated by the package use all algorithms in the folder!!)
+                     consensus_level = 0.7,                                #the consensus value (default = 0.5)
+                     models_dir = model_folder,                            #the folder of the analysis
+                     overwrite = TRUE)                                     #allows overwriting if you run the code again
     } else if (length(algorithms_vector) == 1) {
-      # Criar a pasta ensemble
+      #Create the ensemble 2 folder
       ensemble_dir <- paste0("./cap3/", study_sp[i], "/present/ensemble_2")
       dir_create(ensemble_dir)
       
-      # Nome do arquivo do algoritmo
+      #Algorithm file name
       algorithm_name <- algorithms_vector[1]
       source_file <- paste0("./cap3/", study_sp[i], "/present/final_models/", study_sp[i], "_", algorithm_name, "_raw_mean_th.tif")
       target_file <- paste0(ensemble_dir, "/", study_sp[i], "_", algorithm_name, "_raw_mean_th.tif")
       
-      # Verificar se o arquivo fonte existe antes de copiar
+      #Check if the source file exists before copying
       if (file.exists(source_file)) {
-        # Copiar o arquivo
+        #Copy the file
         file_copy(source_file, target_file)
         print(paste("Arquivo copiado para", target_file))
       } else {

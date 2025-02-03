@@ -1,5 +1,5 @@
 #Chapter three - thesis 
-#Atlantic Forest - Modelling
+#Atlantic Forest - Geral Maps
 #Marina Morim Gomes 2024
 #gomes.mari.95@gmail.com
 
@@ -14,12 +14,11 @@ library(geobr)
 mma <- read_biomes(year = 2019, showProgress = FALSE)
 BR <- geobr::read_country(year = 2020)
 
-#Selecionar apenas o bioma-alvo (MA) ------------------
+#Selecting only Atlantic Forest in IBGE shapefile ------------------
 MA <- mma %>%
   filter(code_biome == 4)
 
-#Criando as listas que vou gerar os mapas -------
-
+#Species list to generate maps -------
 study_sp <- c("Argoravinia aurea",
               "Argoravinia rufiventris",
               "Blaesoxipha (Gigantotheca) plinthopyga",
@@ -95,86 +94,90 @@ study_sp <- c("Argoravinia aurea",
               "Villegasia almeidai")
 
 
-#Criando as escalas gráficas padronizadas -----------------------------
-# Limites para mapas de 0 a 1
+# Standardize scales of legend between continous and binary-----------------------------
+
+#Scale for binary maps (0 - 1)
 breaks <- seq(0.00, 1, by = 0.1)
-#Limites para mapas de 0 a 55
+
+#Scale for continous maps (0 - 60)
 breaks2 <- seq(0, 60, by = 10)
 
-#Cortar mapas com a extensão da MA -------------------
+#Scale for histogram maps (0 - 8)
+breaks3 <- seq(0, 8, by = 2)
 
-# name a folder to save outputs of this run
+#Cropping rasters with AF extention -------------------
+
+#Name a folder to save outputs of this run
 base_path <- "./cap3/cropped_maps/"
 
 for(i in 1:length(study_sp)){
   
+  #Read files
   #read the ensemble continuos model of target species
   cont <- raster(paste0("C:/Users/Dell/OneDrive/Área de Trabalho/cap3/", study_sp[i], "/present/ensemble/", study_sp[i], "_ensemble_average.tif"))
-  
-  #read the ensemble continuos model of target species
-  contun <- raster(paste0("C:/Users/Dell/OneDrive/Área de Trabalho/cap3/", study_sp[i], "/present/ensemble/", study_sp[i], "_uncertainty.tif"))
-  
-  #read the ensemble continuos model of target species
+  #read the uncertainty of ensemble continuous model of target species
+  contun <- raster(paste0("C:/Users/Dell/OneDrive/Área de Trabalho/cap3/", study_sp[i], "/present/ensemble/calculated_uncertainty.tif"))
+  #read the ensemble binary model of target species
   bin <- raster(paste0("C:/Users/Dell/OneDrive/Área de Trabalho/cap3/", study_sp[i], "/present/ensemble_2/", study_sp[i], "_ensemble_0.7_consensus.tif"))
-
-  #read the ensemble continuos model of target species
-  binun <- raster(paste0("C:/Users/Dell/OneDrive/Área de Trabalho/cap3/", study_sp[i], "/present/ensemble_2/", study_sp[i], "_uncertainty.tif"))
+  #read the 'histogram' model 
+  his <- raster(paste0("C:/Users/Dell/OneDrive/Área de Trabalho/cap3/", study_sp[i], "/present/ensemble/raster_histogram.tif"))
   
-  #Convertendo o CRS dos mapas 
+  #Transforming the CRS of maps to SIRGAS 2000 (South America)
   cont <- projectRaster(cont, crs = 4674, method = "ngb")
   contun <- projectRaster(contun, crs = 4674, method = "ngb")
   bin <- projectRaster(bin, crs = 4674, method = "ngb")
-  binun <- projectRaster(binun, crs = 4674, method = "ngb")
+  his <- projectRaster(his, crs = 4674, method = "ngb")
   
-  #Cortando os rasters para a extensão do shapefile 'MA'
+  #Croping rasters for shapefile of 'AF' 
   cont <- raster::crop(cont, extent(MA))
   contun <- raster::crop(contun, extent(MA))
   bin <- raster::crop(bin, extent(MA))
-  binun <- raster::crop(binun, extent(MA))
+  his <- raster::crop(his, extent(MA))
   
-  #Aplicando a mascara da MA para todos
+  #Using a mask in rasters with shapefile of 'AF' 
   cont <- raster::mask(cont, MA)
   contun <- raster::mask(contun, MA)
   bin <- raster::mask(bin, MA)
-  binun <- raster::mask(binun, MA)
+  his <- raster::mask(his, MA)
   
-  #exportar em formato raster
-  #saving raster
+  #Exporting in raster file
   writeRaster(cont, filename = paste0(base_path, study_sp[i], "_ensemble_continuous.tif"), format = "GTiff")
-  writeRaster(contun, filename = paste0(base_path, study_sp[i], "_ensemble_continuous_uncertanty.tif"), format = "GTiff")
+  writeRaster(contun, filename = paste0(base_path, study_sp[i], "_uncertanty.tif"), format = "GTiff")
   writeRaster(bin, filename = paste0(base_path, study_sp[i], "_ensemble_binary.tif"), format = "GTiff")
-  writeRaster(binun, filename = paste0(base_path, study_sp[i], "_ensemble_binary_uncerntanty.tif"), format = "GTiff")
+  writeRaster(his, filename = paste0(base_path, study_sp[i], "_histogram.tif"), format = "GTiff")
 
-  #gerar mapas .png com esses rasters
-  
-  # Crie os mapas com a mesma paleta e limites
-  mapcont <- tm_shape(cont) +
-    tm_raster(palette = "PuBu",
-              style = "cont",
-              alpha = 0.8,
-              breaks = breaks,
-              title = "Suitability") +
-    tm_layout(frame.lwd = 3,
-              legend.position = c("left", "top")) +
-    tm_scale_bar(position = c("right", "top"),
+  #Generating maps with tmap to use in Suplementar Material Appendix S4 
+
+  #continuous map
+  mapcont <- tm_shape(cont) +                             #selecting the raster object
+    tm_raster(palette = "PuBu",                           #Using a blue continuous palette
+              style = "cont",                             #using the style for continuous scales
+              alpha = 0.8,                                #transparency, to make soft colors
+              breaks = breaks,                            #using the scale that we set
+              title = "Suitability") +                    #title of legend
+    tm_layout(frame.lwd = 3,                              #size of legend
+              legend.position = c("left", "top")) +       #position of legend
+    tm_scale_bar(position = c("right", "top"),            #position of scale bar of map
                  width = 0.15,
-                 color.dark = "gray44")
-  mapcont <- mapcont +
-    tm_shape(MA) +
-    tm_borders(lwd = 1.2,
-               col = "gray60")
+                 color.dark = "gray44")                   #color of scale bar of map
   
-  mapcont <- mapcont +
-    tm_shape(BR) +
-    tm_borders(lwd = 0.5,
-               col = "gray44")
+  mapcont <- mapcont +                                    #Using the previous map to add AF 
+    tm_shape(MA) +                                        #selecting the shp of AF
+    tm_borders(lwd = 1.2,                                 #adding borders with 1.2 width 
+               col = "gray60")                            #selecting the color of borders
   
+  mapcont <- mapcont +                                    #using the previous map to add BR limits
+    tm_shape(BR) +                                        #selecting the shp of BR
+    tm_borders(lwd = 0.5,                                 #adding borders with 0.5 width
+               col = "gray44")                            #selecting the color of borders
+
+  #Repeat the process, with little changes of all maps            
   mapcontun <- tm_shape(contun) +
-    tm_raster(palette = "Oranges",
+    tm_raster(palette = "Oranges",                        #Using a orange palette for uncertainty maps
               style = "cont",
               alpha = 0.8,
               breaks = breaks,
-              title = "Uncertainty") +
+              title = "Uncertainty") +                    #changing the name of legend
     tm_layout(frame.lwd = 3,
               legend.position = c("left", "top")) +
     tm_scale_bar(position = c("right", "top"),
@@ -193,9 +196,9 @@ for(i in 1:length(study_sp)){
   
   mapbin <- tm_shape(bin) +
     tm_raster(palette = "PuBu",
-              style = "cat",
+              style = "cat",                            #using the style 'cat' for binary maps, to categorize the legend                            
               alpha = 0.8,
-              breaks = breaks,
+              breaks = breaks2,                         #using the other scale that we set 
               title = "Suitability") +
     tm_layout(frame.lwd = 3,
               legend.position = c("left", "top")) +
@@ -213,32 +216,32 @@ for(i in 1:length(study_sp)){
     tm_borders(lwd = 0.5,
                col = "gray44")
   
-  mapbinun <- tm_shape(binun) +
-    tm_raster(palette = "Oranges",
+  maphis <- tm_shape(his) +
+    tm_raster(palette = "PuBu",
               style = "cont",
               alpha = 0.8,
-              breaks = breaks,
-              title = "Uncertainty") +
+              breaks = breaks3,
+              title = "Algorithm Frequency") +
     tm_layout(frame.lwd = 3,
               legend.position = c("left", "top")) +
     tm_scale_bar(position = c("right", "top"),
                  width = 0.15,
                  color.dark = "gray44")
   
-  mapbinun <- mapbinun +
+  maphis <- maphis +
     tm_shape(MA) +
     tm_borders(lwd = 1.2,
                col = "gray60")
   
-  mapbinun <- mapbinun +
+  maphis <- maphis +
     tm_shape(BR) +
     tm_borders(lwd = 0.5,
                col = "gray44")
   
-  #Salvar os mapas
+  #Export all maps 
   tmap_save(
-    tm = mapcont, 
-    filename = paste0(base_path, study_sp[i], "_ensemble_continuous_map.png"), 
+    tm = mapcont,                                                                 #object that we want to save
+    filename = paste0(base_path, study_sp[i], "_ensemble_continuous_map.png"),    #path to save and name of file
     width = 3000, 
     height = 2800
   )
@@ -258,39 +261,109 @@ for(i in 1:length(study_sp)){
   )
   
   tmap_save(
-    tm = mapbinun, 
-    filename = paste0(base_path, study_sp[i], "_ensemble_binary_uncertanty_map.png"), 
+    tm = maphis, 
+    filename = paste0(base_path, study_sp[i], "_histogram_map.png"), 
     width = 3000, 
     height = 2800
   )
   
 }
 
-#Empilhamento simples dos mapas binários (soma) -------------------------
+#New species list (TPR > 0.5)
 
-# Inicialize um objeto raster com o primeiro arquivo para definir a extensão e a resolução
+study_sp <- c("Argoravinia aurea",
+              "Argoravinia rufiventris",
+              "Blaesoxipha (Gigantotheca) plinthopyga",
+              "Chrysagria duodecimpunctata",
+              "Dexosarcophaga (Bezzisca) ampullula",
+              "Dexosarcophaga (Dexosarcophaga) transita",
+              "Dexosarcophaga (Farrimyia) carvalhoi",
+              "Dexosarcophaga (Farrimyia) globulosa",
+              "Engelimyia inops",
+              "Helicobia aurescens",
+              "Helicobia morionella",
+              "Helicobia pilifera",
+              "Lepidodexia (Notochaeta) cognata",
+              "Lipoptilocnema crispina",
+              "Lipoptilocnema crispula",
+              "Lipoptilocnema lanei",
+              "Microcerella analis",
+              "Microcerella halli",
+              "Oxysarcodexia admixta",
+              "Oxysarcodexia amorosa",
+              "Oxysarcodexia angrensis",
+              "Oxysarcodexia aura",
+              "Oxysarcodexia avuncula",
+              "Oxysarcodexia bakeri",
+              "Oxysarcodexia carvalhoi",
+              "Oxysarcodexia confusa",
+              "Oxysarcodexia culmiforceps",
+              "Oxysarcodexia culminata",
+              "Oxysarcodexia diana",
+              "Oxysarcodexia fluminensis",
+              "Oxysarcodexia fringidea",
+              "Oxysarcodexia injuncta",
+              "Oxysarcodexia intona",
+              "Oxysarcodexia major",
+              "Oxysarcodexia modesta",
+              "Oxysarcodexia parva",
+              "Oxysarcodexia riograndensis",
+              "Oxysarcodexia paulistanensis",
+              "Oxysarcodexia terminalis",
+              "Oxysarcodexia thornax",
+              "Oxysarcodexia timida",
+              "Oxysarcodexia varia",
+              "Peckia (Euboettcheria) anguilla",
+              "Peckia (Euboettcheria) collusor",
+              "Peckia (Euboettcheria) subducta",
+              "Peckia (Pattonella) intermutans",
+              "Peckia (Pattonella) resona",
+              "Peckia (Peckia) chrysostoma",
+              "Peckia (Peckia) pexata",
+              "Peckia (Peckia) uncinata",
+              "Peckia (Sarcodexia) florencioi",
+              "Peckia (Sarcodexia) lambens",
+              "Peckia (Squamatodes) ingens",
+              "Peckia (Squamatodes) trivittata",
+              "Ravinia advena",
+              "Ravinia belforti",
+              "Retrocitomyia retrocita",
+              "Titanogrypa (Cucullomyia) larvicida",
+              "Titanogrypa (Cucullomyia) luculenta",
+              "Tricharaea (Sarcophagula) canuta",
+              "Tricharaea (Sarcophagula) occidua",
+              "Tricharaea (Sarothromyia) femoralis",
+              "Tricharaea (Tricharaea) brevicornis",
+              "Udamopyga percita",
+              "Villegasia almeidai")
+
+
+
+#Stacking binary maps to look for macroecological patterns in AF (sum) -------------------------
+
+# Initialize a raster object with the first file to set the extension and resolution
 first_raster <- raster(paste0("./cap3/cropped_maps/", study_sp[1], "_ensemble_binary.tif"))
 
-# Crie um raster vazio com a mesma extensão e resolução do primeiro raster para acumular as somas
+# Create an empty raster with the same extent and resolution as the first raster to accumulate the sums
 summed_raster <- raster(first_raster)
 summed_raster[] <- 0  # Inicializa todos os valores para zero
 
-# Itere sobre os nomes das espécies e some os rasters
+# Iterate over the species names and sum the rasters
 for (sp in study_sp) {
-  # Construa o caminho do arquivo para o raster atual
+  # Path to actual raster
   file_path <- paste0("./cap3/cropped_maps/", sp, "_ensemble_binary.tif")
   
-  # Leia o raster atual
+  # Import actual raster 
   current_raster <- raster(file_path)
   
-  # Some o raster atual ao raster acumulado
+  # Add the current raster to the accumulated raster
   summed_raster <- summed_raster + current_raster
 }
 
-#salvando o raster gerado
+#Saving the final raster 
 writeRaster(summed_raster, filename = "./cap3/mapas_empilhados/MA_geral_binary.tif", format = "GTiff")
 
-#gerando o mapa
+#Generating a map with the same arguments of species maps
 mapsomado <- tm_shape(summed_raster) +
   tm_raster(palette = "PuBu",
             style = "cont",
@@ -312,71 +385,10 @@ mapsomado <- mapsomado +
   tm_borders(lwd = 0.5,
              col = "gray44")
 
+#saving map
 tmap_save(
   tm = mapsomado, 
   filename = "./cap3/mapas_empilhados/MA_geral_binary_mapa.png", 
-  width = 3000, 
-  height = 2800
-)
-
-#Empilhamento simples dos mapas contínos (média) --------------------
-
-# Inicialize um objeto raster com o primeiro arquivo para definir a extensão e a resolução
-first_raster <- raster(paste0("./cap3/cropped_maps/", study_sp[1], "_ensemble_continuous.tif"))
-
-# Crie um raster vazio com a mesma extensão e resolução do primeiro raster para acumular os valores
-summed_raster <- raster(first_raster)
-summed_raster[] <- 0  # Inicializa todos os valores para zero
-
-# Contador para manter o controle do número de rasters somados
-count <- 0
-
-# Itere sobre os nomes das espécies e some os rasters
-for (sp in study_sp) {
-  # Construa o caminho do arquivo para o raster atual
-  file_path <- paste0("./cap3/cropped_maps/", sp, "_ensemble_continuous.tif")
-  
-  # Leia o raster atual
-  current_raster <- raster(file_path)
-  
-  # Some o raster atual ao raster acumulado
-  summed_raster <- summed_raster + current_raster
-  
-  # Incremente o contador
-  count <- count + 1
-}
-
-# Calcule a média dividindo o raster somado pelo número de rasters
-mean_raster <- summed_raster / count
-
-#exportando o raster gerado
-writeRaster(mean_raster, filename = "./cap3/mapas_empilhados/MA_geral_continuous.tif", format = "GTiff")
-
-#gerando o mapa
-mapmedia <- tm_shape(mean_raster) +
-  tm_raster(palette = "PuBu",
-            style = "cont",
-            alpha = 0.8,
-            breaks = breaks,
-            title = "Species Richness") +
-  tm_layout(frame.lwd = 3,
-            legend.position = c("left", "top")) +
-  tm_scale_bar(position = c("right", "top"),
-               width = 0.15,
-               color.dark = "gray44")
-mapmedia <- mapmedia +
-  tm_shape(MA) +
-  tm_borders(lwd = 1.2,
-             col = "gray60")
-
-mapmedia <- mapmedia +
-  tm_shape(BR) +
-  tm_borders(lwd = 0.5,
-             col = "gray44")
-
-tmap_save(
-  tm = mapmedia, 
-  filename = "./cap3/mapas_empilhados/MA_geral_continuous_mapa.png", 
   width = 3000, 
   height = 2800
 )
